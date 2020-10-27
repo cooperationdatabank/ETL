@@ -1,0 +1,12 @@
+/build
+node_modules
+*.log
+npm-debug.log*
+src/conversion/input_data
+src/conversion/output_graphs
+.envrc-local
+package-lock.json
+/CoDa-ETL
+/data
+.DS*
+errors.csv

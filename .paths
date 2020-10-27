@@ -1,0 +1,3 @@
+#!/bin/bash
+
+export TRIPLY__PATHS__DATA_DIR="${PWD}/data"
