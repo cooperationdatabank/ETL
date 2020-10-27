@@ -1,0 +1,12 @@
+#!/bin/bash
+
+
+echo ${CI_COMMIT_MESSAGE} | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && [ "${CI_BUILD_REF_NAME}" = "master" ] && echo "Skipping version builds on the master branche to avoid the pipeline doing the same work twice" && exit;
+source ./bin/ci/.env
+if [ -n "${FORCE}" ]; then
+  DOCKER_ARG="--no-cache"
+fi
+
+now=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
+echo "Building for tag ${DOCKER_IMAGE} at ${now}"
+docker build -f ./docker/Dockerfile ${DOCKER_ARG} --build-arg "BUILD_REF=${CI_BUILD_REF_NAME}" --build-arg BUILD_DATE="${now}" --build-arg "COMMIT_SHA=${CI_COMMIT_SHA}" -t $DOCKER_IMAGE .

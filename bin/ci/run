@@ -1,0 +1,36 @@
+#!/bin/bash
+set -e
+source ./bin/ci/.env
+MODE=${1}
+[ -z "${MODE}" ] && echoerr "argument required" && exit 1;
+echo "Running in mode ${MODE}"
+if [ "${MODE}" = "acceptance" ]; then
+  #remove other runs when needed. Otherwise, we'd have duplicate runs working on the same directory
+  docker rm -f ${DOCKER_NAME_ACCEPTANCE} 2> /dev/null || true
+  docker run --rm \
+    -v /scratch/coda-etl-acceptatie:/home/triply/data \
+    -e ETL_API_URL=${ACCEPTATIE_ETL_API_URL} \
+    -e ETL_API_TOKEN=${ACCEPTATIE_ETL_API_TOKEN} \
+    -e ETL_API_ACCOUNT_NAME=${ACCEPTATIE_ETL_API_ACCOUNT_NAME} \
+    -e ETL_API_DATASET_NAME=${ACCEPTATIE_ETL_API_DATASET_NAME} \
+    -e ASSET_URL=${ACCEPTATIE_ASSET_URL} \
+    -e MODE=${MODE} \
+    --name ${DOCKER_NAME_ACCEPTANCE} \
+    ${DOCKER_IMAGE}
+elif [ "${MODE}" = "production" ]; then
+  #remove other runs when needed. Otherwise, we'd have duplicate runs working on the same directory
+  docker rm -f ${DOCKER_NAME_PRODUCTION} 2> /dev/null || true
+  docker run --rm \
+    -v /scratch/coda-etl-production:/home/triply/data \
+    -e ETL_API_URL=${PRODUCTION_ETL_API_URL} \
+    -e ETL_API_TOKEN=${PRODUCTION_ETL_API_TOKEN} \
+    -e ETL_API_ACCOUNT_NAME=${PRODUCTION_ETL_API_ACCOUNT_NAME} \
+    -e ETL_API_DATASET_NAME=${PRODUCTION_ETL_API_DATASET_NAME} \
+    -e ASSET_URL=${PRODUCTION_ASSET_URL} \
+    -e MODE=${MODE} \
+    --name ${DOCKER_NAME_PRODUCTION} \
+    ${DOCKER_IMAGE}
+else
+  echoerr "Expected ${MODE} to be 'production', 'acceptance'"
+  exit 1;
+fi
