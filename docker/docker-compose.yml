@@ -1,0 +1,20 @@
+version: '3'
+services:
+  etl:
+    image: triply/coda-etl
+    build:
+      context: ../
+      dockerfile: './docker/Dockerfile'
+      args:
+        BUILD_REF: some-build-ref
+        BUILD_DATE: some-build-date
+        COMMIT_SHA: some-commit-sha
+    environment:
+      - ETL_API_TOKEN
+      - ETL_API_ACCOUNT_NAME
+      - ETL_API_URL
+      - ASSET_URL
+      - ETL_DATASET_NAME=databank
+
+    volumes:
+      - ../data:/home/triply/data

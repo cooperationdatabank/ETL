@@ -1,0 +1,67 @@
+#!/bin/bash
+
+set -e
+
+# [ -z "${MODE}" ] && echoerr "No mode is set, stopping" && exit 1
+[ -z "${ETL_API_TOKEN}" ] && echoerr "No API_TOKEN is set, stopping" && exit 1
+[ -z "${ASSET_URL}" ] && echoerr "No ASSET_URL is set, stopping" && exit 1
+
+#remove legacy folder
+rm -rf ${TRIPLY__PATHS__DATA_DIR}/input_data
+
+INPUT_FOLDER="${TRIPLY__PATHS__DATA_DIR}/input"
+OUTPUT_FOLDER="${TRIPLY__PATHS__DATA_DIR}/output_graphs"
+# Create (or reset) input/output folders
+rm -rf ${INPUT_FOLDER} ${OUTPUT_FOLDER}
+mkdir -p ${INPUT_FOLDER}
+mkdir -p ${OUTPUT_FOLDER}
+cd ${INPUT_FOLDER}
+
+# Get all uploaded assets by grepping the identifier
+echo "Fetcing assets from ${ASSET_URL}"
+for FILE_IDENTIFIER in $(curl -H "Authentication: Bearer ${ETL_API_TOKEN}" ${ASSET_URL} | jq -r '.[].identifier'); do
+  # Curl an asset id and download to fileLocation
+  # The ETL has hardcoded filenames, so it knows which ones to process. I.e., we can just download all assets as is
+  echo curl -JOH "Authentication: Bearer ${ETL_API_TOKEN}" ${ASSET_URL}/${FILE_IDENTIFIER}
+  curl -JOH "Authentication: Bearer ${ETL_API_TOKEN}" ${ASSET_URL}/${FILE_IDENTIFIER}
+done
+# Unzip zipped files.
+unzip -oq "*.zip" -d ./
+
+cd ${TRIPLY_ETL_SRC}
+
+echo
+echoinfo "Running effect size computation"
+time R -f ./EffectSizeComputation.R
+
+
+echo
+echoinfo "Running convert-data script"
+time python3 ./convert-data.py
+
+echo
+echoinfo "Running convert-indicators script"
+time python3 ./convert-indicators.py
+
+echo
+errCount=$(cat ./errors.csv | wc -l)
+echowarn "${errCount} possible errors from errors.csv:"
+cat ./errors.csv
+
+# Upload via client-js runnable to CoDa.
+cd ${TRIPLY_HOME}
+echoinfo "Uploading data to ${ETL_API_URL}/datasets/${ETL_API_ACCOUNT_NAME}/databank"
+./uploadFiles-linux --url ${ETL_API_URL} --dataset databank --account ${ETL_API_ACCOUNT_NAME} --token ${ETL_API_TOKEN} $(ls ${OUTPUT_FOLDER}/*)
+echoinfo "Uploading data to ${ETL_API_URL}/datasets/${ETL_API_ACCOUNT_NAME}/vocabulary"
+./uploadFiles-linux --url ${ETL_API_URL} --dataset vocabulary --account ${ETL_API_ACCOUNT_NAME} --token ${ETL_API_TOKEN} ${OUTPUT_FOLDER}/vocabulary.trig
+
+echoinfo "Syncing services when needed"
+SERVICES_URL="${ETL_API_URL}/datasets/${ETL_API_ACCOUNT_NAME}/databank/services"
+#Forcing the use of http1.1 as a workaround. There is a curl bug (sometimes) causing the error:
+# 'Error in the HTTP2 framing layer'
+curl --http1.1 -X GET -H "Authorization: Bearer ${ETL_API_TOKEN}" ${SERVICES_URL} \
+	| jq -e -r  '.[].name' \
+	| grep -v null \
+	| xargs -I {} curl --http1.1 -H 'content-type: application/json' -H "Authorization: Bearer ${ETL_API_TOKEN}" --data-binary '{"recreate":true}'  ${SERVICES_URL}/{}
+
+echoinfo "Done syncing"
