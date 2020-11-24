@@ -33,7 +33,7 @@ studyCharacteristics <- read.csv(paste0(path,"/input/Study_characteristics.csv")
                                  stringsAsFactors = FALSE, # Study characteristics
                                  check.names=FALSE,
                                  colClasses=c(rep(NA, 54), rep("NULL", 71),
-                                              rep(NA, 2), "NULL", NA, rep("NULL", 25))) %>% # Drop unused columns
+                                              rep(NA, 2), "NULL", NA, rep("NULL", 26))) %>% # Drop unused columns
   filter(!is.na(study_ID) & !(study_ID == FALSE)) %>%
   filter(`Dilemma type(s)` %in% 1:3) %>%
   distinct(., study_ID, .keep_all = TRUE) # Remove duplicates
@@ -110,16 +110,15 @@ dataClean <- dataClean %>%
          n = case_when(n != -999 ~ n,
                        n == -999 & `# Levels` == -999 & !(`Main Effect / Interaction` %in% c(3, 4)) ~ `N.obs/N`,
                        TRUE ~ -999)) %>%
-  mutate(`P(C)` = ifelse(`P(C)` > 1, NA, `P(C)`)) %>%
-  mutate(proportionOfEndowmentContributed = case_when(DV_behavior == "Contribution" & M != -999 & `Choice range upper` != -999 & `Choice range lower` != -999 ~ (M-as.numeric(`Choice range lower`))/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
-                                                      DV_behavior == "Withdrawals" & M != -999 & `Choice range upper` != -999 ~ ((as.numeric(`Choice range upper`) - M)-as.numeric(`Choice range lower`))/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
-                                                      TRUE ~ -999)) %>%
+  mutate(proportionOfEndowmentContributed = (M-as.numeric(`Choice range lower`))/
+                                            (as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`))) %>%
   mutate(logPropContributed = case_when(`P(C)` != -999 ~ log(`P(C)`/(1 - `P(C)`)),
                                         proportionOfEndowmentContributed != -999 ~ log(proportionOfEndowmentContributed/(1 - proportionOfEndowmentContributed)),
                                         TRUE ~ -999),
-         coefficientOfVariation = case_when(`P(C)` != -999 & n != -999 ~ 1 / (n * `P(C)`) + 1 / (n * (1 + `P(C)`)),
-                                            DV_behavior == "Contribution" & proportionOfEndowmentContributed != -999 & SD != -999 ~ (((SD^2) / (M^2)) * 1 / (((1 + proportionOfEndowmentContributed)^2) * n)),
-                                            DV_behavior == "Withdrawals" & proportionOfEndowmentContributed != -999 & SD != -999 ~ (((SD^2) / ((as.numeric(`Choice range upper`) - M)^2)) * 1 / (((1 + proportionOfEndowmentContributed)^2) * n)))) %>%
+         coefficientOfVariation = case_when(`P(C)` != -999 ~ 1 / (n * `P(C)`) + 
+                                                             1 / (n * (1 + `P(C)`)),
+                                            proportionOfEndowmentContributed != -999 ~ (((SD^2) / (M^2)) * 1 /
+                                                                                          (((1 + proportionOfEndowmentContributed)^2) * n)))) %>%
   select(study_ID:SD,proportionOfEndowmentContributed:coefficientOfVariation,everything())
 
 # OBSERVATION-LEVEL DATA FRAME ################################################
@@ -333,9 +332,6 @@ computeEffectSizes <- function(data){
 
   # Combine estimates for d and r
   effectSizes <- rbind(effectSizeD, effectSizeR)
-  
-  # treatment_IDs with DV_behavior == "Withdrawals"
-  withdrawals <- data %>% filter(DV_behavior == "Withdrawals")
 
   # Merge in treatment_IDs and DV specification.
   effectSizes <- data %>%
@@ -344,23 +340,21 @@ computeEffectSizes <- function(data){
     merge(., effectSizes, by = "effect_ID", all.x = TRUE) %>%
     mutate(effect_ID = ifelse(is.na(effectSizeMeasure),
                               paste(effect_ID, "0", sep = "."),
-                              paste(effect_ID, effectSizeMeasure, sep = "."))) %>%
-    # Invert effect sizes from withdrawals
-    mutate(esLL = effectSizeLowerLimit,
-           esUL = effectSizeUpperLimit) %>%
-    mutate(effectSizeEstimate = case_when(treatment_1 %in% withdrawals$treatment_1 ~ -effectSizeEstimate,
-                                          TRUE ~ effectSizeEstimate),
-           effectSizeLowerLimit = case_when(treatment_1 %in% withdrawals$treatment_1 ~ esUL,
-                                            TRUE ~ esLL),
-           effectSizeUpperLimit = case_when(treatment_1 %in% withdrawals$treatment_1 ~ esLL,
-                                            TRUE ~ esUL)) %>%
-    select(-esLL, -esUL)
+                              paste(effect_ID, effectSizeMeasure, sep = ".")))
 
   return(effectSizes)
 }
 
 # Compute effect sizes
 effectSizes <- computeEffectSizes(dataEffects)
+
+# Filter out treatments without either mean cooperation rate or effect size estimate
+effectSizesComplete <- effectSizes %>%
+  drop_na(effectSizeEstimate)
+
+dataClean <- dataClean %>%
+  filter((study_ID %in% effectSizesComplete$study_ID) | 
+           (`P(C)` != -999) | (M != -999) | (`P(E) contributed` != -999) | (`Overall P(C)` != -999))
 
 # Output files
 
