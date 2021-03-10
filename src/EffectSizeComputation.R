@@ -111,15 +111,19 @@ dataClean <- dataClean %>%
                        n == -999 & `# Levels` == -999 & !(`Main Effect / Interaction` %in% c(3, 4)) ~ `N.obs/N`,
                        TRUE ~ -999)) %>%
   mutate(`P(C)` = ifelse(`P(C)` > 1, NA, `P(C)`)) %>%
-  mutate(proportionOfEndowmentContributed = case_when(DV_behavior == "Contribution" & M != -999 & `Choice range upper` != -999 & `Choice range lower` != -999 ~ (M-as.numeric(`Choice range lower`))/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
-                                                      DV_behavior == "Withdrawals" & M != -999 & `Choice range upper` != -999 ~ ((as.numeric(`Choice range upper`) - M)-as.numeric(`Choice range lower`))/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
+  mutate(proportionOfEndowmentContributed = case_when(DV_behavior == "Contribution" & M != -999 & `Choice range upper` != -999 & `Choice range lower` != -999 ~ 
+                                                        (M-as.numeric(`Choice range lower`))/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
+                                                      DV_behavior == "Withdrawals" & M != -999 & `Choice range upper` != -999 ~ 
+                                                        (as.numeric(`Choice range upper`) - M)/(as.numeric(`Choice range upper`)-as.numeric(`Choice range lower`)),
                                                       TRUE ~ -999)) %>%
   mutate(logPropContributed = case_when(`P(C)` != -999 ~ log(`P(C)`/(1 - `P(C)`)),
                                         proportionOfEndowmentContributed != -999 ~ log(proportionOfEndowmentContributed/(1 - proportionOfEndowmentContributed)),
                                         TRUE ~ -999),
-         coefficientOfVariation = case_when(`P(C)` != -999 & n != -999 ~ 1 / (n * `P(C)`) + 1 / (n * (1 + `P(C)`)),
-                                            DV_behavior == "Contribution" & proportionOfEndowmentContributed != -999 & SD != -999 ~ (((SD^2) / (M^2)) * 1 / (((1 + proportionOfEndowmentContributed)^2) * n)),
-                                            DV_behavior == "Withdrawals" & proportionOfEndowmentContributed != -999 & SD != -999 ~ (((SD^2) / ((as.numeric(`Choice range upper`) - M)^2)) * 1 / (((1 + proportionOfEndowmentContributed)^2) * n)))) %>%
+         coefficientOfVariation = case_when(`P(C)` != -999 & n != -999 ~ 1 / (n * `P(C)`) + 1 / (n * (1 - `P(C)`)),
+                                            DV_behavior == "Contribution" & proportionOfEndowmentContributed != -999 & SD != -999 ~ 
+                                              (((SD^2) / ((M - as.numeric(`Choice range lower`))^2)) * 1 / (((1 - proportionOfEndowmentContributed)^2) * n)),
+                                            DV_behavior == "Withdrawals" & proportionOfEndowmentContributed != -999 & SD != -999 ~ 
+                                              (((SD^2) / ((as.numeric(`Choice range upper`) - M - as.numeric(`Choice range lower`))^2)) * 1 / (((1 - proportionOfEndowmentContributed)^2) * n)))) %>%
   select(study_ID:SD,proportionOfEndowmentContributed:coefficientOfVariation,everything())
 
 # OBSERVATION-LEVEL DATA FRAME ################################################
